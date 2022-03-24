@@ -2,17 +2,18 @@
 """
     sys.argv[1] - path to font file.
 """
-import json
 from ttfquery import describe
 import ttfquery.glyph as glyph
 import ttfquery.glyphquery as glyphquery
 import sys
+import os
 from PIL import Image
 
 # Parses all glyphs in font if true, else parses glyphs from CUSTOM_PARSING_GLYPHS
 ALL_GLYPHS = True
 # If ALL_GLYPHS is False, fetch glyphs from CUSTOM_PARSING_GLYPHS
 CUSTOM_PARSING_GLYPHS = u'='
+DIST_DIR = "dist"
 
 flags = filter(lambda x: x[0] == '-', sys.argv[1:])
 font_path = sys.argv[1]
@@ -51,10 +52,12 @@ print('height', glyphquery.charHeight(font))
 print(max_points_count)
 print(len(glyph_infos))
 
-with open('atlas.bmp', 'w') as f:
+if not os.path.exists(DIST_DIR):
+    os.makedirs(DIST_DIR)
+with open("{}/atlas.bmp".format(DIST_DIR), 'w') as f:
     img = Image.new('RGBA', (255, 255), (255, 0, 0, 0))
     pixels = img.load()
-    for i in range(img.size[0]):    # For every pixel:
+    for i in range(img.size[0]):
         for j in range(img.size[1]):
             pixels[i,j] = (i, j, 100) # Set the colour accordingly
     if '--show' in flags:
