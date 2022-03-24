@@ -1,0 +1,4 @@
+ttfquery
+fontTools
+numpy
+Pillow
