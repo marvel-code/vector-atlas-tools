@@ -19,7 +19,7 @@ ALL_GLYPHS = False
 # If ALL_GLYPHS is False, fetch glyphs from CUSTOM_PARSING_GLYPHS
 CUSTOM_PARSING_GLYPHS = u' `1234567890-=~!@#$%^&*()_+qwertyuiop[]QWERTYUIOP{}|asdfghjkl;\'ASDFGHJKL:"zxcvbnm,./ZXCVBNM<>?№ёЁйцукенгшщзхъ\\ЙЦУКЕНГШЩЗХЪфывапролджэФЫВАПРОЛДЖЭячсмитьбюЯЧСМИТЬБЮ'
 #CUSTOM_PARSING_GLYPHS = u'еabc'
-DIST_DIR = "dist"
+DIST_DIR = "../logos-graph_webgl/public/textures/my"
 
 ATLAS_WIDTH = 256
 ATLAS_HEIGHT = 128
@@ -216,15 +216,16 @@ glyphs_info_rows = []
 # g_coords -- хранит координаты блока с инфо глифы в атласе
 g_coords = {}
 glyphs_info_row = []
+g_strokes_coord = [0, grids_height]
 for gs in g_strokes:
     if len(glyphs_info_row) + len(gs[1]) > ATLAS_WIDTH:
         if len(glyphs_info_row) == 0:
             raise Exception('Glyph info row is 0 length! Check {0} with {1} length'.format(gs[0], len(gs[1])))
         glyphs_info_rows.append(glyphs_info_row)
         glyphs_info_row = []
-    g_coords[gs[0]] = [len(glyphs_info_row), len(glyphs_info_rows) - 1]
+    g_coords[gs[0]] = [g_strokes_coord[0] + len(glyphs_info_row), g_strokes_coord[1] + len(glyphs_info_rows)]
     glyphs_info_row += gs[1]
-copy_matrix(glyphs_info_rows, atlas, [0, grids_height])
+copy_matrix(glyphs_info_rows, atlas, g_strokes_coord)
 
 if not os.path.exists(DIST_DIR):
     os.makedirs(DIST_DIR)
@@ -235,16 +236,16 @@ with open('{}/glyphCoords.json'.format(DIST_DIR), 'w') as f:
 with open('{}/glyphInfos.json'.format(DIST_DIR), 'w') as f:
     json.dump(glyph_infos, f)
 
-with open("{}/atlas.bmp".format(DIST_DIR), 'w') as f:
-    img = Image.new('RGBA', (ATLAS_WIDTH, ATLAS_HEIGHT), (255, 0, 0, 255))
-    pixels = img.load()
-    for i in range(ATLAS_HEIGHT):
-        for j in range(ATLAS_WIDTH):
-            try:
-                cell = atlas[i][j]
-                cell[3] = 255
-                pixels[j,i] = tuple(cell)
-            except Exception as ex:
-                raise Exception('Exception on ({0},{1})'.format(i,j))
-    if '--show' in flags:
-        img.show()
+img = Image.new('RGBA', (ATLAS_WIDTH, ATLAS_HEIGHT), (255, 0, 0, 255))
+pixels = img.load()
+for i in range(ATLAS_HEIGHT):
+    for j in range(ATLAS_WIDTH):
+        try:
+            cell = atlas[i][j]
+            cell[3] = 255
+            pixels[j,i] = tuple(cell)
+        except Exception as ex:
+            raise Exception('Exception on ({0},{1})'.format(i,j))
+img.save("{}/atlas.bmp".format(DIST_DIR))
+if '--show' in flags:
+    img.show()
