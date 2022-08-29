@@ -2,3 +2,6 @@ etc/
 .vscode/
 dist/
 venv/
+**/__pycache__
+**/.ipynb_checkpoints
+*.pyc
