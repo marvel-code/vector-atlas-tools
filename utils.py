@@ -131,7 +131,12 @@ def compress_beziers(beziers):
 
 def split(a, n):
     """
+    Split a array on n almost equal parts
     ref: https://stackoverflow.com/questions/2130016/splitting-a-list-into-n-parts-of-approximately-equal-length
     """
     k, m = divmod(len(a), n)
     return (a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n))
+
+def split_by_length(a, n):
+    """Split a by arrays with length = n"""
+    return (a[i*n:(i+1)*n] for i in range(len(a) // n + min(len(a) % n, 1)))

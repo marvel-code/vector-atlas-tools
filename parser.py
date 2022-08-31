@@ -79,7 +79,7 @@ def make_grid(beziers):
                         if len(cell) == MAX_CELL_BEZIERS:
                             skip = True
                             break
-                        cell.append(bi)
+                        cell.append(1 + bi)
                 if skip:
                     break
                 row.append(cell)
@@ -95,7 +95,6 @@ def make_grid(beziers):
 def copy_grid(grid, atlas, coord):
     """Copy grid into atlas with `coord` offset."""
     if len(grid) + coord[1] >= len(atlas) or len(grid) + coord[0] >= len(atlas[0]):
-        print(len(grid), len(atlas), coord)
         raise Exception('Grid exceeded atlas')
     grid_size = len(grid)
     for rowi in range(grid_size):
@@ -109,22 +108,20 @@ def copy_matrix(matrix, atlas, coord):
     """Copy matrix into atlas by rows with `coord` offset."""
     for r in range(len(matrix)):
         for c in range(len(matrix[r])):
-            atlas[coord[1] + r][coord[0] + c] = matrix[r][c]
+            try:
+                atlas[coord[1] + r][coord[0] + c] = matrix[r][c]
+            except Exception as ex:
+                raise Exception('Exception on {}:{} ({}:{}): {}'.format(r, c, coord[1] + r, coord[0] + c, ex))
 
 def convert_beziers_to_pixels(beziers):
     if len(beziers) == 0:
         return []
     pixels = []
     points = compress_beziers(beziers)
-    assert(len(points) % 2 == 1, 'Points length is not odd: {0}'.format(len(points)))
     for p in points:
-        x = int(p[0] * 0xff) # todo: check native shader implementation
-        y = int(p[1] * 0xff)
-        if len(pixels) > 0 and len(pixels[-1]) == 2:
-            pixels[-1] += [x, y]
-        else:
-            pixels.append([x, y])
-    pixels[-1] += [0,0] # Because points is odd length, needs to be aligned to 4 bytes
+        x_bytes = convert_short_to_bytes(int(p[0] * 0xffff))
+        y_bytes = convert_short_to_bytes(int(p[1] * 0xffff))
+        pixels.append(x_bytes + y_bytes)
     return pixels
 
 
@@ -186,6 +183,9 @@ glyph_infos.sort(key=lambda x: len(x['grid']), reverse=True)
 current_grids_row_height = 0
 grids_height = 0
 for gi in glyph_infos:
+    if gi['char'] == '@':
+        print(gi['grid'])
+
     # Grid
     gridsize = len(gi['grid'])
     if current_grids_row_height == 0:
@@ -197,13 +197,13 @@ for gi in glyph_infos:
         current_grids_row_height = gridsize
         grids_height += current_grids_row_height
     copy_grid(gi['grid'], atlas, g_grid_coord)
+    gridmin = copy(g_grid_coord)
     g_grid_coord[0] += gridsize
 
     # Stroke
-    gridmin = copy(g_grid_coord)
-    rasteredgridmin_pixel = [0,0,0,0]
-    gridsize_pixel = convert_short_to_bytes(gridsize) + [0, 0]
     gridmin_pixel = convert_short_to_bytes(gridmin[0]) + convert_short_to_bytes(gridmin[1])
+    rasteredgridmin_pixel = [0,0,0,0]
+    gridsize_pixel = [gridsize, gridsize, 0, 0]
     beziers_pixels = convert_beziers_to_pixels(gi['beziers'])
     g_stroke = (gi['char'], [gridmin_pixel, rasteredgridmin_pixel, gridsize_pixel] + beziers_pixels)
     g_strokes.append(g_stroke)
@@ -211,20 +211,21 @@ for gi in glyph_infos:
 print('Grids height', grids_height)
 
 # glyphs_info_rows -- вторая половина атласа, которая для каждой глифы хранит инфо о сетке глифы в атласе и координаты безье кривых в сжатом виде
-# glyphs_info_row ~ gridmin | rasteredgridmin | gridsize | compressedbezierpoints
+# glyphs_info_row ~ gridmin | rasteredgridmin | gridsize + rasteredGridSize | compressedbezierpoints...
 glyphs_info_rows = []
+glyphs_info_row = []
 # g_coords -- хранит координаты блока с инфо глифы в атласе
 g_coords = {}
-glyphs_info_row = []
 g_strokes_coord = [0, grids_height]
 for gs in g_strokes:
-    if len(glyphs_info_row) + len(gs[1]) > ATLAS_WIDTH:
-        if len(glyphs_info_row) == 0:
-            raise Exception('Glyph info row is 0 length! Check {0} with {1} length'.format(gs[0], len(gs[1])))
+    if len(gs[1]) + len(glyphs_info_row) > ATLAS_WIDTH:
         glyphs_info_rows.append(glyphs_info_row)
         glyphs_info_row = []
-    g_coords[gs[0]] = [g_strokes_coord[0] + len(glyphs_info_row), g_strokes_coord[1] + len(glyphs_info_rows)]
+    g_coords[gs[0]] = [len(glyphs_info_row), g_strokes_coord[1] + len(glyphs_info_rows)]
     glyphs_info_row += gs[1]
+if len(glyphs_info_row) > 0:
+    glyphs_info_rows.append(glyphs_info_row)
+    
 copy_matrix(glyphs_info_rows, atlas, g_strokes_coord)
 
 if not os.path.exists(DIST_DIR):
@@ -234,18 +235,22 @@ with open('{}/glyphCoords.json'.format(DIST_DIR), 'w') as f:
     json.dump(g_coords, f)
 
 with open('{}/glyphInfos.json'.format(DIST_DIR), 'w') as f:
-    json.dump(glyph_infos, f)
+    info = map(lambda gi: { 'char': gi['char'], 'charsize': gi['size'], 'gridsize': len(gi['grid']), 'compressedbezierscount': (len(gi['beziers']) - 1) // 2 }, glyph_infos)
+    json.dump(info, f)
 
-img = Image.new('RGBA', (ATLAS_WIDTH, ATLAS_HEIGHT), (255, 0, 0, 255))
+img = Image.new('RGBA', (ATLAS_WIDTH, ATLAS_HEIGHT), (0, 0, 0, 0))
 pixels = img.load()
 for i in range(ATLAS_HEIGHT):
     for j in range(ATLAS_WIDTH):
         try:
             cell = atlas[i][j]
-            cell[3] = 255
-            pixels[j,i] = tuple(cell)
+            r, g, b, a = cell
+            pixels[j,ATLAS_HEIGHT-1- i] = (b, g, r, a)
         except Exception as ex:
             raise Exception('Exception on ({0},{1})'.format(i,j))
 img.save("{}/atlas.bmp".format(DIST_DIR))
 if '--show' in flags:
     img.show()
+
+print
+print('Success!')
