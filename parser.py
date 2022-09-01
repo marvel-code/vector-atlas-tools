@@ -17,7 +17,8 @@ OFF_CURVE = 0
 # Parses all glyphs in font if true, else parses glyphs from CUSTOM_PARSING_GLYPHS
 ALL_GLYPHS = False
 # If ALL_GLYPHS is False, fetch glyphs from CUSTOM_PARSING_GLYPHS
-CUSTOM_PARSING_GLYPHS = u' `1234567890-=~!@#$%^&*()_+qwertyuiop[]QWERTYUIOP{}|asdfghjkl;\'ASDFGHJKL:"zxcvbnm,./ZXCVBNM<>?№ёЁйцукенгшщзхъ\\ЙЦУКЕНГШЩЗХЪфывапролджэФЫВАПРОЛДЖЭячсмитьбюЯЧСМИТЬБЮ'
+#CUSTOM_PARSING_GLYPHS = u' `1234567890-=~!@#$%^&*()_+qwertyuiop[]QWERTYUIOP{}|asdfghjkl;\'ASDFGHJKL:"zxcvbnm,./ZXCVBNM<>?№ёЁйцукенгшщзхъ\\ЙЦУКЕНГШЩЗХЪфывапролджэФЫВАПРОЛДЖЭячсмитьбюЯЧСМИТЬБЮ'
+CUSTOM_PARSING_GLYPHS = u'2'
 #CUSTOM_PARSING_GLYPHS = u'еabc'
 DIST_DIR = "../logos-graph_webgl/public/textures/my"
 
@@ -28,7 +29,7 @@ print("Glyphs: " + (CUSTOM_PARSING_GLYPHS if not ALL_GLYPHS else 'all'))
 
 # etc
 
-def fetch_beziers(contours, char_size):
+def fetch_beziers(contours, char_size, char):
     """
     Начало координат находится в левом нижнем углу.
     Оси направлены вверх и направо.
@@ -48,14 +49,14 @@ def fetch_beziers(contours, char_size):
             points.append(normalize_fpoint(fpoint, char_size))
             last_fpoint = fpoint
         # Group contour points into beziers
-        for i in range(int((len(points) + 2) / 3)):
+        for i in range(len(points) // 2):
             bezier = []
             for j in range(3):
                 bezier.append(points[2 * i + j][0])
             beziers.append(bezier)
     return beziers
     
-def make_grid(beziers):
+def make_grid(beziers, char):
     """
     (i,j) cell boundaries are (d*j, d*i, d*(j + 1), d*(i + 1)), where `d` is `1/gridSize`.
     Начальная ячейка находится в нижнем левом углу.
@@ -64,6 +65,49 @@ def make_grid(beziers):
     """
     MAX_GRID_SIZE = 32
     MAX_CELL_BEZIERS = 4
+
+    def encodeMidClosest(x, y, d, cell):
+        # Looking for neasest bezier to mid point on y=mid_y line
+        mid = (x + .5) * d, (y + .5) * d
+        crossing_bezier = None
+        crossing_t = None
+        min_distance = -1
+        for b in beziers:
+            t_arr = fetch_bezier_cross(b, 1, mid[1])
+            if y == 0:
+                print('b', x, y, mid[1], t_arr, b)
+            for t in t_arr:
+                p = calc_bezier(b, t)
+                distance = p[0] - mid[0]
+                if distance < 0 or min_distance != -1 and distance > min_distance:
+                    continue
+                min_distance = distance
+                crossing_bezier = b
+                crossing_t = t
+        
+        # Calc bezier local direction
+        is_mid_colored = False
+        dy = None
+        if crossing_t is not None:
+            dr = 1e-01
+            p1 = calc_bezier(crossing_bezier, crossing_t - dr)
+            p2 = calc_bezier(crossing_bezier, crossing_t + dr)
+            dy = p2[1] - p1[1]
+            is_mid_colored = dy < 0
+
+        if y == 0:
+            print('dy', x, y, dy)
+
+        # Encode is_mid_colored in cell
+        sorted(cell)
+        cell = list(filter(lambda x: x > 0, cell))
+        if len(cell) == 0:
+            cell = [0, 1]
+        while len(cell) < 4:
+            cell.insert(0, 0)
+        cell_tail = [cell[0], cell[3]] if is_mid_colored else [cell[3], cell[0]]
+        return cell[1:3] + cell_tail
+        
     grid = None
     for gridsize in range(2, MAX_GRID_SIZE):
         grid = []
@@ -79,7 +123,9 @@ def make_grid(beziers):
                         if len(cell) == MAX_CELL_BEZIERS:
                             skip = True
                             break
-                        cell.append(1 + bi)
+                        # Индексы начинаются с 2, тк 0 и 1 нужны 
+                        # на кодировку цвета центра клетки.
+                        cell.append(2 + bi)
                 if skip:
                     break
                 row.append(cell)
@@ -90,6 +136,13 @@ def make_grid(beziers):
             break
         if gridsize == MAX_GRID_SIZE - 1:
             raise Exception("Max grid size enriched")
+    
+    gridsize = len(grid)
+    d = 1. / gridsize
+    for rowi in range(gridsize):
+        for coli in range(gridsize):
+            grid[rowi][coli] = encodeMidClosest(coli, rowi, d, grid[rowi][coli])
+
     return grid
 
 def copy_grid(grid, atlas, coord):
@@ -119,8 +172,8 @@ def convert_beziers_to_pixels(beziers):
     pixels = []
     points = compress_beziers(beziers)
     for p in points:
-        x_bytes = convert_short_to_bytes(int(p[0] * 0xffff))
-        y_bytes = convert_short_to_bytes(int(p[1] * 0xffff))
+        x_bytes = convert_short_to_bytes(round(p[0] * 0xffff))
+        y_bytes = convert_short_to_bytes(round(p[1] * 0xffff))
         pixels.append(x_bytes + y_bytes)
     return pixels
 
@@ -150,14 +203,15 @@ for glyph_name in glyph_names:
 
     # Make glyph info
     charsize = (charwidth, charheight)
-    beziers = fetch_beziers(contours, charsize)
-    grid = make_grid(beziers)
-    glyph_infos.append({
+    beziers = fetch_beziers(contours, charsize, char)
+    grid = make_grid(beziers, char)
+    glyph_info = {
         'char': char,
         'grid': grid,
         'beziers': beziers,
         'size': charsize,
-    })
+    }
+    glyph_infos.append(glyph_info)
 
     # Statistic
     points_count = sum(map(lambda x: sum(map(lambda y: len(y), x)), beziers))
@@ -183,9 +237,6 @@ glyph_infos.sort(key=lambda x: len(x['grid']), reverse=True)
 current_grids_row_height = 0
 grids_height = 0
 for gi in glyph_infos:
-    if gi['char'] == '@':
-        print(gi['grid'])
-
     # Grid
     gridsize = len(gi['grid'])
     if current_grids_row_height == 0:

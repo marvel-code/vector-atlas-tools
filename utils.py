@@ -71,7 +71,7 @@ def fetch_bezier_cross(bezier, componentIndex, componentValue):
     if isclose(a, 0):
         if isclose(b, 0):
             return []
-        t = c / b / 2
+        t = -c / b / 2
         return [t] if is_inside_section(t, 0, 1) else []
     # Квадратичная форма
     D = b ** 2 - a * c
@@ -117,7 +117,7 @@ def avrpoint(p1, p2):
     return (x0, y0)
 
 def convert_short_to_bytes(x):
-    return [int(x / 256), x % 256]
+    return [int(x / 256), int(x % 256)]
 
 def compress_beziers(beziers):
     """The end of i bezier is start of i+1 bezier."""
