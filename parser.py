@@ -18,7 +18,7 @@ OFF_CURVE = 0
 ALL_GLYPHS = False
 # If ALL_GLYPHS is False, fetch glyphs from CUSTOM_PARSING_GLYPHS
 #CUSTOM_PARSING_GLYPHS = u' `1234567890-=~!@#$%^&*()_+qwertyuiop[]QWERTYUIOP{}|asdfghjkl;\'ASDFGHJKL:"zxcvbnm,./ZXCVBNM<>?№ёЁйцукенгшщзхъ\\ЙЦУКЕНГШЩЗХЪфывапролджэФЫВАПРОЛДЖЭячсмитьбюЯЧСМИТЬБЮ'
-CUSTOM_PARSING_GLYPHS = u'2'
+CUSTOM_PARSING_GLYPHS = u'@'
 #CUSTOM_PARSING_GLYPHS = u'еabc'
 DIST_DIR = "../logos-graph_webgl/public/textures/my"
 
@@ -35,18 +35,18 @@ def fetch_beziers(contours, char_size, char):
     Оси направлены вверх и направо.
     """
     beziers = []
-    for contour in contours:
+    for ci, contour in enumerate(contours):
         # Fetch contour points
         points = []
         last_fpoint = contour[-1]
         for i, fpoint in enumerate(contour):
             if (last_fpoint[1] == fpoint[1] and fpoint[1] == OFF_CURVE):
                 fpoint_ = (avrpoint(fpoint[0], last_fpoint[0]), ON_CURVE)
-                points.append(normalize_fpoint(fpoint_, char_size))
+                points.append(normalize_fpoint(fpoint_, char_size, chardescent))
             if i > 0 and (last_fpoint[1] == fpoint[1] and fpoint[1] == ON_CURVE):
                 fpoint_ = (avrpoint(fpoint[0], last_fpoint[0]), OFF_CURVE)
-                points.append(normalize_fpoint(fpoint_, char_size))
-            points.append(normalize_fpoint(fpoint, char_size))
+                points.append(normalize_fpoint(fpoint_, char_size, chardescent))
+            points.append(normalize_fpoint(fpoint, char_size, chardescent))
             last_fpoint = fpoint
         # Group contour points into beziers
         for i in range(len(points) // 2):
@@ -54,6 +54,9 @@ def fetch_beziers(contours, char_size, char):
             for j in range(3):
                 bezier.append(points[2 * i + j][0])
             beziers.append(bezier)
+
+        print('Points contour_{}\n'.format(ci) + '\n'.join(list(map(lambda p: str(p[0]), points))))
+    
     return beziers
     
 def make_grid(beziers, char):
@@ -74,8 +77,6 @@ def make_grid(beziers, char):
         min_distance = -1
         for b in beziers:
             t_arr = fetch_bezier_cross(b, 1, mid[1])
-            if y == 0:
-                print('b', x, y, mid[1], t_arr, b)
             for t in t_arr:
                 p = calc_bezier(b, t)
                 distance = p[0] - mid[0]
@@ -94,9 +95,6 @@ def make_grid(beziers, char):
             p2 = calc_bezier(crossing_bezier, crossing_t + dr)
             dy = p2[1] - p1[1]
             is_mid_colored = dy < 0
-
-        if y == 0:
-            print('dy', x, y, dy)
 
         # Encode is_mid_colored in cell
         sorted(cell)
@@ -182,6 +180,7 @@ flags = filter(lambda x: x[0] == '-', sys.argv[1:])
 font_path = sys.argv[1]
 font = describe.openFont(font_path)
 charheight = glyphquery.charHeight(font)
+chardescent = glyphquery.charDescent(font)
 glyphname_map = font['cmap'].getcmap(*describe.guessEncoding(font)).cmap # char -> glyphName
 charmap = dict([(value, key) for key, value in glyphname_map.items()]) # glyphName -> char
 glyph_names = font.getGlyphNames() \

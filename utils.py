@@ -33,8 +33,8 @@ def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
               (diff <= abs_tol))
     return result
 
-def normalize_fpoint(fpoint, size):
-    return ((float(fpoint[0][0]) / size[0], float(fpoint[0][1]) / size[1]), fpoint[1])
+def normalize_fpoint(fpoint, size, chardescent):
+    return ((float(fpoint[0][0]) / size[0], float(fpoint[0][1] - chardescent) / size[1]), fpoint[1])
 
 def is_point_inside(point, rectangle):
     """
