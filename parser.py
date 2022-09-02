@@ -17,8 +17,8 @@ OFF_CURVE = 0
 # Parses all glyphs in font if true, else parses glyphs from CUSTOM_PARSING_GLYPHS
 ALL_GLYPHS = False
 # If ALL_GLYPHS is False, fetch glyphs from CUSTOM_PARSING_GLYPHS
-#CUSTOM_PARSING_GLYPHS = u' `1234567890-=~!@#$%^&*()_+qwertyuiop[]QWERTYUIOP{}|asdfghjkl;\'ASDFGHJKL:"zxcvbnm,./ZXCVBNM<>?№ёЁйцукенгшщзхъ\\ЙЦУКЕНГШЩЗХЪфывапролджэФЫВАПРОЛДЖЭячсмитьбюЯЧСМИТЬБЮ'
-CUSTOM_PARSING_GLYPHS = u'@'
+CUSTOM_PARSING_GLYPHS = u' `1234567890-=~!@#$%^&*()_+qwertyuiop[]QWERTYUIOP{}|asdfghjkl;\'ASDFGHJKL:"zxcvbnm,./ZXCVBNM<>?№ёЁйцукенгшщзхъ\\ЙЦУКЕНГШЩЗХЪфывапролджэФЫВАПРОЛДЖЭячсмитьбюЯЧСМИТЬБЮ'
+#CUSTOM_PARSING_GLYPHS = u'й'
 #CUSTOM_PARSING_GLYPHS = u'еabc'
 DIST_DIR = "../logos-graph_webgl/public/textures/my"
 
@@ -55,8 +55,8 @@ def fetch_beziers(contours, char_size, char):
                 bezier.append(points[2 * i + j][0])
             beziers.append(bezier)
 
-        print('Points contour_{}\n'.format(ci) + '\n'.join(list(map(lambda p: str(p[0]), points))))
-    
+        #print('Points contour_{}\n'.format(ci) + '\n'.join(list(map(lambda p: str(p[0]), points))))
+        
     return beziers
     
 def make_grid(beziers, char):
@@ -104,7 +104,14 @@ def make_grid(beziers, char):
         while len(cell) < 4:
             cell.insert(0, 0)
         cell_tail = [cell[0], cell[3]] if is_mid_colored else [cell[3], cell[0]]
-        return cell[1:3] + cell_tail
+        result = cell[1:3] + cell_tail
+
+        #if x == 2 and y == 5:
+            #print(cell, result)
+            #print('\n'.join(list(map(lambda b: '\n'.join(list(map(lambda p: str(p), b))), filter(lambda b: (beziers.index(b) + 2) in cell, beziers)))))
+            #print(beziers)
+
+        return result
         
     grid = None
     for gridsize in range(2, MAX_GRID_SIZE):
@@ -116,14 +123,19 @@ def make_grid(beziers, char):
             for j in range(gridsize):
                 cellRectangle = (d*j, d*i, d*(j + 1), d*(i + 1)) # (x1,y1,x2,y2)
                 cell = []
+                bp = None
+                contour_index = 0
                 for bi, b in enumerate(beziers):
+                    if bp is not None and bp[2] != b[0]:
+                        contour_index += 1
                     if is_bezier_crossing_cell(b, cellRectangle):
                         if len(cell) == MAX_CELL_BEZIERS:
                             skip = True
                             break
                         # Индексы начинаются с 2, тк 0 и 1 нужны 
                         # на кодировку цвета центра клетки.
-                        cell.append(2 + bi)
+                        cell.append(2 + bi + contour_index)
+                    bp = b
                 if skip:
                     break
                 row.append(cell)
@@ -255,6 +267,7 @@ for gi in glyph_infos:
     rasteredgridmin_pixel = [0,0,0,0]
     gridsize_pixel = [gridsize, gridsize, 0, 0]
     beziers_pixels = convert_beziers_to_pixels(gi['beziers'])
+    print(beziers_pixels[-3:])
     g_stroke = (gi['char'], [gridmin_pixel, rasteredgridmin_pixel, gridsize_pixel] + beziers_pixels)
     g_strokes.append(g_stroke)
 

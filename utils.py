@@ -3,7 +3,9 @@
 from cmath import sqrt
 import math
 
-def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
+EPS = 1e-09
+
+def isclose(a, b, rel_tol=EPS, abs_tol=0.0):
     '''
     Python 2 implementation of Python 3.5 math.isclose()
     https://hg.python.org/cpython/file/tip/Modules/mathmodule.c#l1993
@@ -46,7 +48,7 @@ def is_point_inside(point, rectangle):
 def is_inside_section(t, t1, t2):
     return t >= t1 and t <= t2
     
-def fetch_bezier_cross(bezier, componentIndex, componentValue):
+def fetch_bezier_cross(bezier, componentIndex, componentValue, f = 0):
     """
     B(t) = (1-t)^2*p0 + 2(1-t)t*p1 + t^2*p2
     B(t) = (p0-2p1+p2)tt + 2(p1-p0)t + p0
@@ -65,13 +67,13 @@ def fetch_bezier_cross(bezier, componentIndex, componentValue):
     b = c1 - c0
     c = c0 - componentValue
 
-    # Решаем уравнение ax**2 + bx + c = 0.
+    # Решаем уравнение ax**2 + 2bx + c = 0.
 
     # Линейная форма
-    if isclose(a, 0):
-        if isclose(b, 0):
+    if isclose(a, 0, abs_tol=EPS):
+        if isclose(b, 0, abs_tol=EPS):
             return []
-        t = -c / b / 2
+        t = -c / b / 2.
         return [t] if is_inside_section(t, 0, 1) else []
     # Квадратичная форма
     D = b ** 2 - a * c
@@ -124,9 +126,14 @@ def compress_beziers(beziers):
     if len(beziers) == 0:
         return []
     points = [beziers[0][0]]
+    bp = None
     for b in beziers:
+        if bp is not None and bp[2] != b[0]:
+            # Another contour
+            points += [(0,0), b[0]]
         points.append(b[1])
         points.append(b[2])
+        bp = b
     return points
 
 def split(a, n):
