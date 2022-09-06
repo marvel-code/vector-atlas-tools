@@ -202,6 +202,7 @@ glyph_infos = []
 stat = {
     'maxPointsCount': (0, None),
     'maxGridSize': (0, None),
+    'maxCharWidth': (0, None),
 }
 for glyph_name in glyph_names:
     g = glyph.Glyph(glyph_name)
@@ -210,6 +211,8 @@ for glyph_name in glyph_names:
     if charwidth == 0 or glyph_name not in charmap:
         continue
     char = unichr(charmap[glyph_name])
+    if charwidth > stat['maxCharWidth'][0]:
+        stat['maxCharWidth'] = (charwidth, char)
     print(char)
 
     # Make glyph info
@@ -234,6 +237,7 @@ for glyph_name in glyph_names:
 
 print
 print(stat)
+print('Char height', charheight)
 print
 print
 print('Glyph count:', len(glyph_infos))
@@ -265,10 +269,11 @@ for gi in glyph_infos:
     # Stroke
     gridmin_pixel = convert_short_to_bytes(gridmin[0]) + convert_short_to_bytes(gridmin[1])
     rasteredgridmin_pixel = [0,0,0,0]
-    gridsize_pixel = [gridsize, gridsize, 0, 0]
+    size_k = 255. / stat['maxCharWidth'][0]
+    rasteredsize = [int(gi['size'][0] * size_k), int(gi['size'][1] * size_k)]
+    gridsize_pixel = [gridsize, gridsize] + rasteredsize
     beziers_pixels = convert_beziers_to_pixels(gi['beziers'])
-    print(beziers_pixels[-3:])
-    g_stroke = (gi['char'], [gridmin_pixel, rasteredgridmin_pixel, gridsize_pixel] + beziers_pixels)
+    g_stroke = (gi['char'], [gridmin_pixel, rasteredgridmin_pixel, gridsize_pixel] + beziers_pixels, rasteredsize)
     g_strokes.append(g_stroke)
 
 print('Grids height', grids_height)
@@ -277,14 +282,19 @@ print('Grids height', grids_height)
 # glyphs_info_row ~ gridmin | rasteredgridmin | gridsize + rasteredGridSize | compressedbezierpoints...
 glyphs_info_rows = []
 glyphs_info_row = []
-# g_coords -- хранит координаты блока с инфо глифы в атласе
-g_coords = {}
+# g_infos -- хранит координаты блока с инфо глифы в атласе, ширину глифы и тп.
+g_infos = {}
 g_strokes_coord = [0, grids_height]
 for gs in g_strokes:
     if len(gs[1]) + len(glyphs_info_row) > ATLAS_WIDTH:
         glyphs_info_rows.append(glyphs_info_row)
         glyphs_info_row = []
-    g_coords[gs[0]] = [len(glyphs_info_row), g_strokes_coord[1] + len(glyphs_info_rows)]
+    g_infos[gs[0]] = {
+        'atlas_x': len(glyphs_info_row),
+        'atlas_y': g_strokes_coord[1] + len(glyphs_info_rows),
+        'width': gs[2][0],
+        'height': gs[2][1],
+    }
     glyphs_info_row += gs[1]
 if len(glyphs_info_row) > 0:
     glyphs_info_rows.append(glyphs_info_row)
@@ -294,12 +304,8 @@ copy_matrix(glyphs_info_rows, atlas, g_strokes_coord)
 if not os.path.exists(DIST_DIR):
     os.makedirs(DIST_DIR)
 
-with open('{}/glyphCoords.json'.format(DIST_DIR), 'w') as f:
-    json.dump(g_coords, f)
-
-with open('{}/glyphInfos.json'.format(DIST_DIR), 'w') as f:
-    info = map(lambda gi: { 'char': gi['char'], 'charsize': gi['size'], 'gridsize': len(gi['grid']), 'compressedbezierscount': (len(gi['beziers']) - 1) // 2 }, glyph_infos)
-    json.dump(info, f)
+with open('{}/glyphs.json'.format(DIST_DIR), 'w') as f:
+    json.dump(g_infos, f)
 
 img = Image.new('RGBA', (ATLAS_WIDTH, ATLAS_HEIGHT), (0, 0, 0, 0))
 pixels = img.load()
